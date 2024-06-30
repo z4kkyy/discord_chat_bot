@@ -206,4 +206,3 @@ class GPTchat(commands.Cog, name="gptchat"):
 async def setup(bot) -> None:
     await bot.add_cog(GPTchat(bot))
 
-
