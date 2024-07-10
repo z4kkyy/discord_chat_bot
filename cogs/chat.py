@@ -5,11 +5,13 @@ Version: 6.1.0
 
 Modified by Y.Ozaki - https://github.com/mttk1528
 """
+import asyncio
 from collections import defaultdict, deque
 # from openai import OpenAI
 from datetime import datetime
 from discord.ext import commands
 # from discord.ext import tasks
+import discord
 from discord.ext.commands import Context
 from pprint import pprint
 from typing import Union
@@ -21,13 +23,13 @@ class GPTchat(commands.Cog, name="gptchat"):
         self.bot = bot
         self.openai_client = bot.openai_client
 
-        self.server_to_gpt_model = defaultdict(lambda: "gpt-3.5-turbo")
+        self.server_to_gpt_model = defaultdict(lambda: "gpt-4o")
 
         self.MAX_MEMORY = 20  # 20
         self._init_messages = [
             {
                 "role": "system",
-                "content": "あなたはの名前はかし子です。なによりもUserにとって親しみやすく、センスのある面白い人として振る舞うことが要求されています。また、常にクリエイティブでウィットに富む柔軟な思考を行ってください。常に敬語を用いてください。英語でのプロンプトには英語で答えてください。"
+                "content": "あなたはの名前はかし子です。常に敬語を用いてください。日本語のプロンプトに対しては日本語で、英語でのプロンプトに対しては英語で答えてください。役に立つアシスタントして、賢く有能に振る舞ってください。"
             },
             {
                 "role": "user",
@@ -40,6 +42,7 @@ class GPTchat(commands.Cog, name="gptchat"):
         ]
 
         self.server_to_messages = defaultdict(lambda: deque(maxlen=(self.MAX_MEMORY + 1) * 2))
+        self.server_to_channel = defaultdict(lambda: None)
 
     # @tasks.loop(seconds=600)
     # async def loop_reset(self) -> None:
@@ -59,7 +62,7 @@ class GPTchat(commands.Cog, name="gptchat"):
         guild_id = context.guild.id
         # pprint(self.server_to_messages[guild_id])
         self.server_to_messages[guild_id] = deque(maxlen=(self.MAX_MEMORY + 1) * 2)
-        if self.server_to_gpt_model[context.guild.id] == "gpt-4-turbo-preview":
+        if self.server_to_gpt_model[context.guild.id] == "gpt-4o":
             self.server_to_gpt_model[context.guild.id] = "gpt-3.5-turbo"
 
         await context.send("Successfully reset the conversation.")
@@ -139,15 +142,22 @@ class GPTchat(commands.Cog, name="gptchat"):
             return
         if message.content.startswith(self.bot.config["prefix"]):
             return
-        if message.channel.id not in [1230828380291596329, 1230836921673191444]:
-            return
         if message.content.startswith("*ig"):
+            return
+
+        if message.channel.id not in [1230828380291596329, 1230836921673191444, 1257108526359253042]:
             return
 
         print("-------------------------------------------------------------------")
         print(f"--- message by {message.author} (id: {message.author.id})  -> {message.content}")
         guild_id = message.guild.id
         model = self.server_to_gpt_model[guild_id]
+        channel = self.server_to_channel[guild_id]  # noqa: F841
+
+        # # currently unused
+        # if channel is None or channel != message.channel.id:
+        #     return
+
         result = await self.generate_response(message, model)
         answer = result["answer"]
         created_at = result["created_at"]
@@ -184,22 +194,67 @@ class GPTchat(commands.Cog, name="gptchat"):
     )
     async def kasiko(self, context: Context) -> None:
         """
-        This is a testing command that does nothing.
+        This command changes the GPT model.
 
         :param context: The application command context.
         """
         if self.server_to_gpt_model[context.guild.id] == "gpt-3.5-turbo":
-            self.server_to_gpt_model[context.guild.id] = "gpt-4-turbo-preview"
-            await context.send("Changed model to gpt-4-turbo-preview")
+            self.server_to_gpt_model[context.guild.id] = "gpt-4o"
+            await context.send("Changed model to gpt-4o")
         else:
             self.server_to_gpt_model[context.guild.id] = "gpt-3.5-turbo"
             await context.send("Changed model to gpt-3.5-turbo")
 
-    # @commands.hybrid_command(
-    #     name="init_messsaages",
-    #     description="This function initializes the messages for the server.",
-    # )
-    # async def _init_messages.copy()(self, context: Context) -> None:
+    @commands.hybrid_command(
+        name="setchannel",
+        description="This command shows the current messages.",
+    )
+    async def setchannel(self, context: Context) -> None:
+        """
+        This command sets the channel to have the conversation.
+
+        :param context: The application command context.
+        """
+        guild_id = context.guild.id
+
+        view = SelectChannelView()
+        await context.send(view=view)
+        await view.waiter.wait()
+        self.server_to_channel[guild_id] = view.selected_channel_id
+
+
+class SelectChannelView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__()
+        self.selected_channel = None
+        self.selected_channel_id = None
+        self.waiter = asyncio.Event()
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        channel_types=[discord.ChannelType.text],
+        placeholder="Select a channel!",
+        min_values=1,
+        max_values=1,
+        disabled=False
+    )
+    async def select_channel(
+        self, interaction: discord.Interaction,
+        select: discord.ui.ChannelSelect,
+    ) -> None:
+        self.selected_channel = select.values[0]
+        self.selected_channel_id = select.values[0].id
+        print(select.values[0].id)
+        print(type(select.values[0]))
+        select.disabled = True
+        await interaction.response.edit_message(view=self)
+        embed = discord.Embed(
+            title="Channel Selection",
+            description=(f"Successfully set channel to {self.selected_channel.mention}!"),
+            color=0x00FF00,
+        )
+        await interaction.followup.send(embed=embed)
+        self.waiter.set()
 
 
 # And then we finally add the cog to the bot so that it can load, unload, reload and use it's content.
