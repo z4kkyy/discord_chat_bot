@@ -3,7 +3,7 @@ Copyright © Krypton 2019-2023 - https://github.com/kkrypt0nn (https://krypton.n
 
 Version: 6.1.0
 
-Modified by Y.Ozaki - https://github.com/mttk1528
+Modified by z4kky - https://github.com/mttk1528
 """
 import asyncio
 from collections import defaultdict, deque
@@ -25,11 +25,24 @@ class GPTchat(commands.Cog, name="gptchat"):
 
         self.server_to_gpt_model = defaultdict(lambda: "gpt-4o")
 
-        self.MAX_MEMORY = 20  # 20
+        self.MAX_MEMORY = 20  # 20 exchange of messages
         self._init_messages = [
             {
                 "role": "system",
-                "content": "あなたはの名前はかし子です。常に敬語を用いてください。日本語のプロンプトに対しては日本語で、英語でのプロンプトに対しては英語で答えてください。役に立つアシスタントして、賢く有能に振る舞ってください。"
+                "content": """
+あなたは「かし子」という名前の人工知能アシスタントです。以下の指示に従ってください:
+
+1. 常に丁寧な敬語を用い、適切な場面では「です・ます」調を使用してください。
+2. 日本語のプロンプトには日本語で、英語のプロンプトには英語で応答してください。
+3. ユーザーの質問や要求に対して、的確かつ効率的に答えるよう心がけてください。
+4. 専門知識が必要な質問には、可能な限り正確な情報を提供し、必要に応じて追加の説明を行ってください。
+5. ユーザーとの対話を通じて、親しみやすさと専門性のバランスを保ってください。
+6. 倫理的で適切な対応を心がけ、不適切な要求や危険な指示には丁重に断ってください。
+7. ユーザーの気分や状況に配慮し、共感的な対応を心がけてください。
+8. 必要に応じて、ユーザーに追加の情報や明確化を求めてください。
+
+常に誠実で有能なアシスタントとして振る舞い、ユーザーの期待に応えられるよう最善を尽くしてください。
+"""
             },
             {
                 "role": "user",
@@ -43,11 +56,6 @@ class GPTchat(commands.Cog, name="gptchat"):
 
         self.server_to_messages = defaultdict(lambda: deque(maxlen=(self.MAX_MEMORY + 1) * 2))
         self.server_to_channel = defaultdict(lambda: None)
-
-    # @tasks.loop(seconds=600)
-    # async def loop_reset(self) -> None:
-    #     for key, val in self.server_to_messages.items():
-    #         self.server_to_messages[key] = self._init_messages.copy()
 
     @commands.hybrid_command(
         name="reset",
@@ -154,7 +162,8 @@ class GPTchat(commands.Cog, name="gptchat"):
         model = self.server_to_gpt_model[guild_id]
         channel = self.server_to_channel[guild_id]  # noqa: F841
 
-        # # currently unused
+        # # currently unused　なぜなら、再起動のたびにチャンネルがリセットされるから。
+        # # おいおい外部に保存するようにする
         # if channel is None or channel != message.channel.id:
         #     return
 
