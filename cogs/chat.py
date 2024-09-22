@@ -3,12 +3,12 @@ Copyright © Krypton 2019-2023 - https://github.com/kkrypt0nn (https://krypton.n
 
 Version: 6.1.0
 
-Modified by z4kky - https://github.com/mttk1528
+Modified by z4kky - https://github.com/z4kkyy
 """
 import asyncio
 from collections import defaultdict, deque
 # from openai import OpenAI
-from datetime import datetime
+from datetime import datetime, timedelta
 from discord.ext import commands
 # from discord.ext import tasks
 import discord
@@ -17,14 +17,11 @@ from pprint import pprint
 from typing import Union
 
 
-# TODO: implement error handling
 class GPTchat(commands.Cog, name="gptchat"):
     def __init__(self, bot) -> None:
         self.bot = bot
         self.openai_client = bot.openai_client
-
         self.server_to_gpt_model = defaultdict(lambda: "gpt-4o")
-
         self.MAX_MEMORY = 20  # 20 exchange of messages
         self._init_messages = [
             {
@@ -56,6 +53,27 @@ class GPTchat(commands.Cog, name="gptchat"):
 
         self.server_to_messages = defaultdict(lambda: deque(maxlen=(self.MAX_MEMORY + 1) * 2))
         self.server_to_channel = defaultdict(lambda: None)
+        self.server_to_last_activity = defaultdict(lambda: datetime.now())
+
+        # Initialize background tasks
+        self.cleanup_task = self.bot.loop.create_task(self.check_and_cleanup_histories())
+
+    async def check_and_cleanup_histories(self) -> None:
+        """
+        Checks and cleans up the chat histories.
+        """
+        await self.bot.wait_until_ready()
+        while not self.bot.is_closed():
+            await asyncio.sleep(60 * 60)
+            current_time = datetime.now()
+            for guild_id, last_activity in self.server_to_last_activity.items():
+                time_since_last_activity = current_time - last_activity
+                if time_since_last_activity > timedelta(hours=24):
+                    self.server_to_messages[guild_id].clear()
+                    self.server_to_gpt_model[guild_id] = "gpt-4o"
+                    print(f"Cleaned up history for guild {guild_id} due to inactivity")
+                else:
+                    print(f"Guild {guild_id} active. Last activity: {time_since_last_activity} ago")
 
     @commands.hybrid_command(
         name="reset",
@@ -91,7 +109,7 @@ class GPTchat(commands.Cog, name="gptchat"):
         await context.send(f"Current GPT model: {mode}")
         # pprint(self.server_to_messages[guild_id])
 
-    async def generate_response(self, message: str, model: str = "gpt-3.5-turbo") -> Union[str, int, str, str, int, int, int]:
+    async def generate_response(self, message: str, model: str = "gpt-4o") -> Union[str, int, str, str, int, int, int]:
         """
         Generates a response to a given message.
 
@@ -99,6 +117,7 @@ class GPTchat(commands.Cog, name="gptchat"):
         :return: The generated response.
         """
         guild_id = message.guild.id
+        # self.server_to_last_activity[guild_id] = datetime.now()
         self.server_to_messages[guild_id].append({
             "role": "user",
             "content": message.content
@@ -166,8 +185,10 @@ class GPTchat(commands.Cog, name="gptchat"):
         # # おいおい外部に保存するようにする
         # if channel is None or channel != message.channel.id:
         #     return
+        self.server_to_last_activity[guild_id] = datetime.now()
 
         result = await self.generate_response(message, model)
+
         answer = result["answer"]
         created_at = result["created_at"]
         model_info = result["model_info"]
