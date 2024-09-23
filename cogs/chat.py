@@ -288,6 +288,5 @@ class SelectChannelView(discord.ui.View):
         self.waiter.set()
 
 
-# And then we finally add the cog to the bot so that it can load, unload, reload and use it's content.
 async def setup(bot) -> None:
     await bot.add_cog(GPTchat(bot))
